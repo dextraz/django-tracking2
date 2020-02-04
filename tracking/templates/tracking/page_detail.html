@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html>
 <head>
 <title>{{ page_url }} Details - django-tracking2</title>
@@ -13,6 +14,7 @@
             <dt># of Unique Visitors</dt>
             <dd>{{ visitors }}</dt>
         </dl>
+        <canvas id="tracking-page-detail-chart"></canvas>
         {% if pageviews.has_previous %}
             <a href="{% url 'tracking-page-detail' %}?page_url={{ page_url }}&page={{ pageviews.previous_page_number }}&start={{ start_time|date:"Y-m-d H:i:s" }}&end={{ end_time|date:"Y-m-d H:i:s" }}">previous</a>
         {% endif %}
@@ -45,5 +47,24 @@
             <a href="{% url 'tracking-page-detail' %}?page_url={{ page_url }}&page={{ pageviews.next_page_number }}&start={{ start_time|date:"Y-m-d H:i:s" }}&end={{ end_time|date:"Y-m-d H:i:s" }}">next</a>
         {% endif %}
     </div>
+
+    <script type="text/javascript" src="http://code.jquery.com/jquery-1.10.0.min.js"></script>
+    <script type="text/javascript" src="{% static 'js/Chart.min.js' %}"></script>
+    <script type="text/javascript">
+        $.get(
+            '{% url "tracking-page-chart" %}',
+            {
+                page_url: '{{ page_url }}',
+                start: '{{ start_time|date:"Y-m-d H:i:s" }}',
+                end: '{{ end_time|date:"Y-m-d H:i:s" }}'
+            },
+            data => {
+                var ctx = $("#tracking-page-detail-chart").get(0).getContext("2d");
+                new Chart(ctx, {
+                    type: 'line', data: data
+                });
+            }
+        );
+    </script>
 </body>
 </html>

@@ -1,7 +1,8 @@
 import logging
 
-from datetime import timedelta
+from datetime import timedelta, datetime
 from functools import reduce
+from collections import defaultdict, OrderedDict
 
 from django.shortcuts import (
     render,
@@ -12,6 +13,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import permission_required
 from django.db.models import Count, Avg, Sum
 from django.core.paginator import Paginator
+
+from chartjs.views.lines import BaseLineChartView
 
 from tracking.models import Visitor, Pageview
 from tracking.settings import (
@@ -216,3 +219,66 @@ def page_detail(request):
         'end_time': end_time,
     }
     return render(request, 'tracking/page_detail.html', context)
+
+class UserBasedPageChartJson(BaseLineChartView):
+
+    def get_labels(self):
+        return [d.isoformat() for d in self._get_time_list()]
+
+    def get_providers(self):
+        """Return names of datasets."""
+        return list(self._get_user_dates_dict().keys())
+
+    def get_options(self):
+        pass
+
+    def get_data(self):
+        retList = []
+        dates = self._get_time_list()
+        for dDict in self._get_user_dates_dict().values():
+            userViewCounts = [dDict.get(d, 0) for d in dates]
+            retList.append(userViewCounts)
+        return retList
+
+    def _get_user_dates_dict(self):
+        # memoized method
+        if not hasattr(self, 'userDatesDict'):
+            # build userDatesDict
+            page_url = self.request.GET.get('page_url')
+            (start_time, end_time, _, _, _) = processTimeRangeForm(self.request)
+            pvs = Pageview.objects.filter(
+                url=page_url,
+                view_time__range=(start_time, end_time),
+            ).order_by(
+                'view_time',
+            ).values(
+                'view_time',
+                'visitor__user__username',
+            )
+            # Bin pageview counts by username and date
+            self.userDatesDict = OrderedDict()
+            for pv in pvs:
+                u = pv['visitor__user__username']
+                d = pv['view_time'].date()
+                if u not in self.userDatesDict:
+                    self.userDatesDict[u] = OrderedDict()
+                if d not in self.userDatesDict[u]:
+                    self.userDatesDict[u][d] = 0
+                self.userDatesDict[u][d] += 1
+        return self.userDatesDict
+
+    def _get_time_list(self):
+        # memoized method
+        if not hasattr(self, 'timeList'):
+            # find min and max dates in data
+            dDicts = self._get_user_dates_dict().values()
+            minDate = datetime.fromtimestamp(2**32).date()
+            maxDate = datetime.fromtimestamp(0).date()
+            for dDict in dDicts:
+                dates = list(dDict.keys())
+                minDate = min(minDate, dates[0])
+                maxDate = max(maxDate, dates[-1])
+            # create labels of every date between min and max
+            numDays = (maxDate - minDate).days
+            self.timeList = [minDate + timedelta(days=n) for n in range(0, numDays)]
+        return self.timeList

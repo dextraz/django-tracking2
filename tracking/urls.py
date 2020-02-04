@@ -8,6 +8,7 @@ from tracking.views import (
     visitor_pageview_detail,
     page_overview,
     page_detail,
+    UserBasedPageChartJson,
 )
 
 urlpatterns = [
@@ -18,4 +19,5 @@ urlpatterns = [
     url(r'^visits/(?P<visit_id>.*)/$', visitor_detail, name='tracking-visitor-detail'),
     url(r'^pages/$', page_overview, name='tracking-page-overview'),
     url(r'^page/$', page_detail, name='tracking-page-detail'),
+    url(r'^page/chart/$', UserBasedPageChartJson.as_view(), name='tracking-page-chart'),
 ]
