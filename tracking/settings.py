@@ -24,4 +24,25 @@ TRACK_QUERY_STRING = getattr(settings, 'TRACK_QUERY_STRING', False)
 
 TRACK_PAGING_SIZE = getattr(settings, 'TRACK_PAGING_SIZE', 100)
 
-TRACK_BODY_QUERY_DICT = getattr(settings, 'TRACK_BODY_QUERY_DICT', False)
+TRACK_REQ_BODY = getattr(settings, 'TRACK_REQ_BODY', False)
+
+TRACK_REQ_BODY_CONTENT_TYPES = getattr(
+    settings,
+    'TRACK_REQ_BODY_CONTENT_TYPES',
+    {
+        'application/json',
+        'multipart/form-data',
+    }
+)
+
+TRACK_REQ_BODY_MAX_LEN = getattr(
+    settings,
+    'TRACK_REQ_BODY_MAX_BYTES',
+    10240
+)
+
+TRACK_REQ_BODY_ACCEPTED_ENCODINGS = getattr(
+    settings,
+    'TRACK_REQ_BODY_ACCEPTED_ENCODINGS',
+    'UTF-8',
+)

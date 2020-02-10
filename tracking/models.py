@@ -93,13 +93,10 @@ class Pageview(models.Model):
     query_string = models.TextField(null=True, editable=False)
     method = models.CharField(max_length=20, null=True)
     view_time = models.DateTimeField(db_index=True)
+    req_body = models.TextField()
 
     objects = PageviewManager()
 
     class Meta(object):
         ordering = ('-view_time',)
 
-class BodyQueryDictItem(models.Model):
-    page_view = models.ForeignKey(Pageview, on_delete=models.CASCADE)
-    key = models.TextField()
-    value = models.TextField()
