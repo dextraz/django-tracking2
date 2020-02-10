@@ -29,6 +29,9 @@ class TimeRangeForm(forms.Form):
     start = forms.DateTimeField(required=False, input_formats=input_formats)
     end = forms.DateTimeField(required=False, input_formats=input_formats)
 
+class URLRegexForm(forms.Form):
+    urlRegex = forms.CharField(required=False)
+
 def get_ip_address(request):
     for header in headers:
         if request.META.get(header, None):
@@ -62,3 +65,11 @@ def processTimeRangeForm(request):
     # If the start_date is before tracking began, warn about incomplete data
     warn_incomplete = (start_time < track_start_time)
     return (start_time, end_time, track_start_time, warn_incomplete, form)
+
+def processURLRegexForm(request):
+    urlRegex = ''
+    defaults = {'urlRegex': ''}
+    form = URLRegexForm(data=(request.GET if 'urlRegex' in request.GET else None) or defaults)
+    if form.is_valid():
+        urlRegex = form.cleaned_data['urlRegex']
+    return (urlRegex, form)

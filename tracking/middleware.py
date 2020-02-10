@@ -4,6 +4,7 @@ import warnings
 
 import django
 from django.db import IntegrityError, transaction
+from django.http import QueryDict
 from django.utils import timezone
 from django.utils.encoding import smart_text
 try:
@@ -11,7 +12,7 @@ try:
 except ImportError:
     MiddlewareMixin = object
 
-from tracking.models import Visitor, Pageview
+from tracking.models import Visitor, Pageview, BodyQueryDictItem
 from tracking.utils import get_ip_address, total_seconds
 from tracking.settings import (
     TRACK_AJAX_REQUESTS,
@@ -23,6 +24,7 @@ from tracking.settings import (
     TRACK_QUERY_STRING,
     TRACK_REFERER,
     TRACK_SUPERUSERS,
+    TRACK_BODY_QUERY_DICT,
 )
 
 track_ignore_urls = [re.compile(x) for x in TRACK_IGNORE_URLS]
@@ -142,6 +144,15 @@ class VisitorTrackingMiddleware(MiddlewareMixin):
             method=request.method, referer=referer,
             query_string=query_string)
         pageview.save()
+
+        if TRACK_BODY_QUERY_DICT:
+            qd = QueryDict(request.body)
+            qdItems = [BodyQueryDictItem(
+                page_view=pageview,
+                key=k,
+                value=v
+            ) for k, v in qd.items()]
+            BodyQueryDictItem.objects.bulk_create(qdItems)
 
     def process_response(self, request, response):
         # If dealing with a non-authenticated user, we still should track the

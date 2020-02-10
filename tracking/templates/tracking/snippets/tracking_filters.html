@@ -1,6 +1,9 @@
 <div id="tracking-filters">
     <form method="GET">
         {{ form.as_table }}
+        {% if urlRegexForm %}
+            {{ urlRegexForm.as_table }}
+        {% endif %}
         {% if page_url %}
             <input name="page_url" type="hidden" value={{ page_url }} />
         {% endif %}

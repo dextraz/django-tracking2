@@ -19,6 +19,17 @@
                 <dt>Query String</dt>
                 <dd>{{ pageview.query_string }}</dt>
             {% endif %}
+            {% if body_query_items %}
+                <dt>Body Query Items</dt>
+                <dd>
+                    <dl>
+                    {% for item in body_query_items %}
+                        <dt>{{ item.key }}</dt>
+                        <dd>{{ item.value }}</dd>
+                    {% endfor %}
+                    </dl>
+                </dd>
+            {% endif %}
         </dl>
     </div>
     <a href={% url 'tracking-page-detail' %}?page_url={{ pageview.url }}>Page details across all visitors</a>

@@ -22,7 +22,7 @@ from tracking.settings import (
     TRACK_PAGING_SIZE,
     TRACK_USING_GEOIP,
 )
-from tracking.utils import processTimeRangeForm
+from tracking.utils import processTimeRangeForm, processURLRegexForm
 
 log = logging.getLogger(__file__)
 
@@ -163,17 +163,21 @@ def visitor_pageview_detail(request, user_id, pageview_id):
     context = {
         'pageview': pageview,
         'duration': duration,
+        'body_query_items': pageview.bodyquerydictitem_set.all()
     }
     return render(request, 'tracking/visitor_pageview_detail.html', context)
 
 @permission_required('tracking.visitor_log')
 def page_overview(request):
     (start_time, end_time, track_start_time, warn_incomplete, form) = processTimeRangeForm(request)
+#    urlRegex, urlRegexForm = processURLRegexForm(request)
 
     page = request.GET.get('page', 1)
     relevant_pvs = Pageview.objects.filter(view_time__lt=end_time)
     if start_time:
         relevant_pvs = relevant_pvs.filter(view_time__gte=start_time)
+#    if urlRegex:
+#        relevant_pvs = relevant_pvs.filter(url__regex=urlRegex)
     pageview_counts = relevant_pvs.values('url').annotate(views=Count('url')).order_by('-views')
     paginator = Paginator(pageview_counts, TRACK_PAGING_SIZE)
 
@@ -182,6 +186,7 @@ def page_overview(request):
         'total_page_views': reduce(lambda acc, c: acc + c['views'], pageview_counts, 0),
         'total_pages': len(pageview_counts),
         'form': form,
+#        'urlRegexForm': urlRegexForm,
         'track_start_time': track_start_time,
         'warn_incomplete': warn_incomplete,
         'start_time': start_time,
@@ -202,7 +207,7 @@ def page_detail(request):
     relevant_pvs = Pageview.objects.filter(view_time__lt=end_time)
     if start_time:
         relevant_pvs = relevant_pvs.filter(view_time__gte=start_time)
-    pageviews = relevant_pvs.filter(url=page_url).order_by('-view_time')
+    pageviews = relevant_pvs.filter(url__regex=page_url).order_by('-view_time')
     pv_count = pageviews.count()
     uniqueVisitors = relevant_pvs.values('visitor_id').distinct().count()
     paginator = Paginator(pageviews, TRACK_PAGING_SIZE)
@@ -247,7 +252,7 @@ class UserBasedPageChartJson(BaseLineChartView):
             page_url = self.request.GET.get('page_url')
             (start_time, end_time, _, _, _) = processTimeRangeForm(self.request)
             pvs = Pageview.objects.filter(
-                url=page_url,
+                url__regex=page_url,
                 view_time__range=(start_time, end_time),
             ).order_by(
                 'view_time',

@@ -82,7 +82,6 @@ class Visitor(models.Model):
             ('visitor_log', 'Can view visitor'),
         )
 
-
 class Pageview(models.Model):
     visitor = models.ForeignKey(
         Visitor,
@@ -99,3 +98,8 @@ class Pageview(models.Model):
 
     class Meta(object):
         ordering = ('-view_time',)
+
+class BodyQueryDictItem(models.Model):
+    page_view = models.ForeignKey(Pageview, on_delete=models.CASCADE)
+    key = models.TextField()
+    value = models.TextField()
