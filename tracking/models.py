@@ -93,7 +93,7 @@ class Pageview(models.Model):
     query_string = models.TextField(null=True, editable=False)
     method = models.CharField(max_length=20, null=True)
     view_time = models.DateTimeField(db_index=True)
-    req_body = models.TextField()
+    req_body = models.TextField(null=True)
 
     objects = PageviewManager()
 

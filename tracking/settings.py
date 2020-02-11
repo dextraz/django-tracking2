@@ -37,12 +37,14 @@ TRACK_REQ_BODY_CONTENT_TYPES = getattr(
 
 TRACK_REQ_BODY_MAX_LEN = getattr(
     settings,
-    'TRACK_REQ_BODY_MAX_BYTES',
+    'TRACK_REQ_BODY_MAX_LEN',
     10240
 )
 
 TRACK_REQ_BODY_ACCEPTED_ENCODINGS = getattr(
     settings,
     'TRACK_REQ_BODY_ACCEPTED_ENCODINGS',
-    'UTF-8',
+    {
+        'UTF-8',
+    }
 )

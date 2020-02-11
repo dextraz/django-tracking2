@@ -30,7 +30,10 @@ class TimeRangeForm(forms.Form):
     end = forms.DateTimeField(required=False, input_formats=input_formats)
 
 class URLRegexForm(forms.Form):
-    urlRegex = forms.CharField(required=False)
+    urlRegex = forms.CharField(required=False, label='URL Regex')
+
+class BodyRegexForm(forms.Form):
+    bodyRegex = forms.CharField(required=False, label='Req. Body Regex')
 
 def get_ip_address(request):
     for header in headers:
@@ -66,10 +69,16 @@ def processTimeRangeForm(request):
     warn_incomplete = (start_time < track_start_time)
     return (start_time, end_time, track_start_time, warn_incomplete, form)
 
-def processURLRegexForm(request):
-    urlRegex = ''
-    defaults = {'urlRegex': ''}
-    form = URLRegexForm(data=(request.GET if 'urlRegex' in request.GET else None) or defaults)
+def processRegexForm(request, frmCls, fieldName):
+    regex = ''
+    defaults = {fieldName: ''}
+    form = frmCls(data=(request.GET if fieldName in request.GET else None) or defaults)
     if form.is_valid():
-        urlRegex = form.cleaned_data['urlRegex']
-    return (urlRegex, form)
+        regex = form.cleaned_data[fieldName]
+    return (regex, form)
+
+def processURLRegexForm(request):
+    return processRegexForm(request, URLRegexForm, 'urlRegex')
+
+def processBodyRegexForm(request):
+    return processRegexForm(request, BodyRegexForm, 'bodyRegex')

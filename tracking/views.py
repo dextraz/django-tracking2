@@ -1,7 +1,8 @@
 import logging
-
+import importlib
 from datetime import timedelta, datetime
 from functools import reduce
+from abc import ABC, abstractmethod
 from collections import defaultdict, OrderedDict
 
 from django.shortcuts import (
@@ -14,15 +15,19 @@ from django.contrib.auth.decorators import permission_required
 from django.db.models import Count, Avg, Sum
 from django.core.paginator import Paginator
 
-from chartjs.views.lines import BaseLineChartView
-
 from tracking.models import Visitor, Pageview
 from tracking.settings import (
     TRACK_PAGEVIEWS,
     TRACK_PAGING_SIZE,
     TRACK_USING_GEOIP,
 )
-from tracking.utils import processTimeRangeForm, processURLRegexForm
+from tracking.utils import (
+    processTimeRangeForm,
+    processURLRegexForm,
+    processBodyRegexForm
+)
+
+HAS_CHART_JS = importlib.util.find_spec("chartjs") is not None
 
 log = logging.getLogger(__file__)
 
@@ -67,7 +72,6 @@ def visitor_overview(request, user_id):
         user = get_object_or_404(get_user_model(), pk=user_id)
     visits = Visitor.objects.filter(user=user, start_time__range=(start_time, end_time))
     paginator = Paginator(visits, TRACK_PAGING_SIZE)
-    log.critical(visits)
 
     context = {
         'form': form,
@@ -163,21 +167,23 @@ def visitor_pageview_detail(request, user_id, pageview_id):
     context = {
         'pageview': pageview,
         'duration': duration,
-        'body_query_items': pageview.bodyquerydictitem_set.all()
     }
     return render(request, 'tracking/visitor_pageview_detail.html', context)
 
 @permission_required('tracking.visitor_log')
 def page_overview(request):
     (start_time, end_time, track_start_time, warn_incomplete, form) = processTimeRangeForm(request)
-#    urlRegex, urlRegexForm = processURLRegexForm(request)
+    urlRegex, urlRegexForm = processURLRegexForm(request)
+    bodyRegex, bodyRegexForm = processBodyRegexForm(request)
 
     page = request.GET.get('page', 1)
     relevant_pvs = Pageview.objects.filter(view_time__lt=end_time)
     if start_time:
         relevant_pvs = relevant_pvs.filter(view_time__gte=start_time)
-#    if urlRegex:
-#        relevant_pvs = relevant_pvs.filter(url__regex=urlRegex)
+    if urlRegex:
+        relevant_pvs = relevant_pvs.filter(url__regex=urlRegex)
+    if bodyRegex:
+        relevant_pvs = relevant_pvs.filter(req_body__regex=bodyRegex)
     pageview_counts = relevant_pvs.values('url').annotate(views=Count('url')).order_by('-views')
     paginator = Paginator(pageview_counts, TRACK_PAGING_SIZE)
 
@@ -186,11 +192,15 @@ def page_overview(request):
         'total_page_views': reduce(lambda acc, c: acc + c['views'], pageview_counts, 0),
         'total_pages': len(pageview_counts),
         'form': form,
-#        'urlRegexForm': urlRegexForm,
+        'urlRegexForm': urlRegexForm,
+        'bodyRegexForm': bodyRegexForm,
         'track_start_time': track_start_time,
         'warn_incomplete': warn_incomplete,
         'start_time': start_time,
         'end_time': end_time,
+        'urlRegex': urlRegex,
+        'bodyRegex': bodyRegex,
+        'has_chart_js': HAS_CHART_JS,
     }
     return render(request, 'tracking/page_overview.html', context)
 
@@ -207,7 +217,7 @@ def page_detail(request):
     relevant_pvs = Pageview.objects.filter(view_time__lt=end_time)
     if start_time:
         relevant_pvs = relevant_pvs.filter(view_time__gte=start_time)
-    pageviews = relevant_pvs.filter(url__regex=page_url).order_by('-view_time')
+    pageviews = relevant_pvs.filter(url=page_url).order_by('-view_time')
     pv_count = pageviews.count()
     uniqueVisitors = relevant_pvs.values('visitor_id').distinct().count()
     paginator = Paginator(pageviews, TRACK_PAGING_SIZE)
@@ -222,68 +232,115 @@ def page_detail(request):
         'warn_incomplete': warn_incomplete,
         'start_time': start_time,
         'end_time': end_time,
+        'has_chart_js': HAS_CHART_JS,
     }
     return render(request, 'tracking/page_detail.html', context)
 
-class UserBasedPageChartJson(BaseLineChartView):
+if HAS_CHART_JS:
+    from chartjs.views.lines import BaseLineChartView
 
-    def get_labels(self):
-        return [d.isoformat() for d in self._get_time_list()]
+    class UserBasedChartJson(BaseLineChartView, ABC):
 
-    def get_providers(self):
-        """Return names of datasets."""
-        return list(self._get_user_dates_dict().keys())
+        def get_labels(self):
+            return [d.isoformat() for d in self._get_time_list()]
 
-    def get_options(self):
-        pass
+        def get_providers(self):
+            """Return names of datasets."""
+            return list(self._get_user_dates_dict().keys())
 
-    def get_data(self):
-        retList = []
-        dates = self._get_time_list()
-        for dDict in self._get_user_dates_dict().values():
-            userViewCounts = [dDict.get(d, 0) for d in dates]
-            retList.append(userViewCounts)
-        return retList
+        def get_options(self):
+            pass
 
-    def _get_user_dates_dict(self):
-        # memoized method
-        if not hasattr(self, 'userDatesDict'):
-            # build userDatesDict
-            page_url = self.request.GET.get('page_url')
-            (start_time, end_time, _, _, _) = processTimeRangeForm(self.request)
-            pvs = Pageview.objects.filter(
-                url__regex=page_url,
-                view_time__range=(start_time, end_time),
-            ).order_by(
-                'view_time',
-            ).values(
-                'view_time',
-                'visitor__user__username',
-            )
-            # Bin pageview counts by username and date
-            self.userDatesDict = OrderedDict()
-            for pv in pvs:
-                u = pv['visitor__user__username']
-                d = pv['view_time'].date()
-                if u not in self.userDatesDict:
-                    self.userDatesDict[u] = OrderedDict()
-                if d not in self.userDatesDict[u]:
-                    self.userDatesDict[u][d] = 0
-                self.userDatesDict[u][d] += 1
-        return self.userDatesDict
+        def get_data(self):
+            retList = []
+            dates = self._get_time_list()
+            for dDict in self._get_user_dates_dict().values():
+                userViewCounts = [dDict.get(d, 0) for d in dates]
+                retList.append(userViewCounts)
+            return retList
 
-    def _get_time_list(self):
-        # memoized method
-        if not hasattr(self, 'timeList'):
-            # find min and max dates in data
-            dDicts = self._get_user_dates_dict().values()
-            minDate = datetime.fromtimestamp(2**32).date()
-            maxDate = datetime.fromtimestamp(0).date()
-            for dDict in dDicts:
-                dates = list(dDict.keys())
-                minDate = min(minDate, dates[0])
-                maxDate = max(maxDate, dates[-1])
-            # create labels of every date between min and max
-            numDays = (maxDate - minDate).days
-            self.timeList = [minDate + timedelta(days=n) for n in range(0, numDays)]
-        return self.timeList
+        @abstractmethod
+        def _get_user_dates_dict(self):
+            pass
+
+        def _get_time_list(self):
+            # memoized method
+            if not hasattr(self, 'timeList'):
+                # find min and max dates in data
+                dDicts = self._get_user_dates_dict().values()
+                minDate = datetime.fromtimestamp(2**32).date()
+                maxDate = datetime.fromtimestamp(0).date()
+                for dDict in dDicts:
+                    dates = list(dDict.keys())
+                    minDate = min(minDate, dates[0])
+                    maxDate = max(maxDate, dates[-1])
+                # create labels of every date between min and max
+                numDays = (maxDate - minDate).days + 1
+                self.timeList = [minDate + timedelta(days=n) for n in range(0, numDays)]
+            return self.timeList
+
+    class UserBasedPageChartJson(UserBasedChartJson):
+
+        def _get_user_dates_dict(self):
+            # memoized method
+            if not hasattr(self, 'userDatesDict'):
+                # build userDatesDict
+                page_url = self.request.GET.get('page_url')
+                (start_time, end_time, _, _, _) = processTimeRangeForm(self.request)
+                pvs = Pageview.objects.filter(
+                    url=page_url,
+                    view_time__gte=start_time,
+                    view_time__lt=end_time,
+                ).order_by(
+                    'view_time',
+                ).values(
+                    'view_time',
+                    'visitor__user__username',
+                )
+                # Bin pageview counts by username and date
+                self.userDatesDict = OrderedDict()
+                for pv in pvs:
+                    u = pv['visitor__user__username']
+                    d = pv['view_time'].date()
+                    if u not in self.userDatesDict:
+                        self.userDatesDict[u] = OrderedDict()
+                    if d not in self.userDatesDict[u]:
+                        self.userDatesDict[u][d] = 0
+                    self.userDatesDict[u][d] += 1
+            return self.userDatesDict
+
+    class UserBasedPageOverviewChartJson(UserBasedChartJson):
+
+        def _get_user_dates_dict(self):
+            # memoized method
+            if not hasattr(self, 'userDatesDict'):
+                # build userDatesDict
+                (start_time, end_time, _, _, _) = processTimeRangeForm(self.request)
+                urlRegex, _ = processURLRegexForm(self.request)
+                bodyRegex, _ = processBodyRegexForm(self.request)
+
+                relevant_pvs = Pageview.objects.filter(view_time__lt=end_time)
+                if start_time:
+                    relevant_pvs = relevant_pvs.filter(view_time__gte=start_time)
+                if urlRegex:
+                    relevant_pvs = relevant_pvs.filter(url__regex=urlRegex)
+                if bodyRegex:
+                    relevant_pvs = relevant_pvs.filter(req_body__regex=bodyRegex)
+
+                relevant_pvs = relevant_pvs.order_by(
+                    'view_time',
+                ).values(
+                    'view_time',
+                    'visitor__user__username',
+                )
+                # Bin pageview counts by username and date
+                self.userDatesDict = OrderedDict()
+                for pv in relevant_pvs:
+                    u = pv['visitor__user__username']
+                    d = pv['view_time'].date()
+                    if u not in self.userDatesDict:
+                        self.userDatesDict[u] = OrderedDict()
+                    if d not in self.userDatesDict[u]:
+                        self.userDatesDict[u][d] = 0
+                    self.userDatesDict[u][d] += 1
+            return self.userDatesDict

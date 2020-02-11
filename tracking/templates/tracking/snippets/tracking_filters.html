@@ -4,6 +4,9 @@
         {% if urlRegexForm %}
             {{ urlRegexForm.as_table }}
         {% endif %}
+        {% if bodyRegexForm %}
+            {{ bodyRegexForm.as_table }}
+        {% endif %}
         {% if page_url %}
             <input name="page_url" type="hidden" value={{ page_url }} />
         {% endif %}

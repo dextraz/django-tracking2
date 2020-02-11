@@ -19,16 +19,9 @@
                 <dt>Query String</dt>
                 <dd>{{ pageview.query_string }}</dt>
             {% endif %}
-            {% if body_query_items %}
-                <dt>Body Query Items</dt>
-                <dd>
-                    <dl>
-                    {% for item in body_query_items %}
-                        <dt>{{ item.key }}</dt>
-                        <dd>{{ item.value }}</dd>
-                    {% endfor %}
-                    </dl>
-                </dd>
+            {% if pageview.req_body %}
+                <dt>Request Body</dt>
+                <dd><code>{{ pageview.req_body }}</code></dd>
             {% endif %}
         </dl>
     </div>

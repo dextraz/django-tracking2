@@ -1,6 +1,7 @@
 import re
 import logging
 import warnings
+from functools import reduce
 
 import django
 from django.db import IntegrityError, transaction
@@ -12,7 +13,7 @@ try:
 except ImportError:
     MiddlewareMixin = object
 
-from tracking.models import Visitor, Pageview, BodyQueryDictItem
+from tracking.models import Visitor, Pageview
 from tracking.utils import get_ip_address, total_seconds
 from tracking.settings import (
     TRACK_AJAX_REQUESTS,
@@ -24,7 +25,10 @@ from tracking.settings import (
     TRACK_QUERY_STRING,
     TRACK_REFERER,
     TRACK_SUPERUSERS,
-    TRACK_BODY_QUERY_DICT,
+    TRACK_REQ_BODY,
+    TRACK_REQ_BODY_CONTENT_TYPES,
+    TRACK_REQ_BODY_ACCEPTED_ENCODINGS,
+    TRACK_REQ_BODY_MAX_LEN,
 )
 
 track_ignore_urls = [re.compile(x) for x in TRACK_IGNORE_URLS]
@@ -143,16 +147,24 @@ class VisitorTrackingMiddleware(MiddlewareMixin):
             visitor=visitor, url=request.path, view_time=view_time,
             method=request.method, referer=referer,
             query_string=query_string)
-        pageview.save()
 
-        if TRACK_BODY_QUERY_DICT:
-            qd = QueryDict(request.body)
-            qdItems = [BodyQueryDictItem(
-                page_view=pageview,
-                key=k,
-                value=v
-            ) for k, v in qd.items()]
-            BodyQueryDictItem.objects.bulk_create(qdItems)
+        if (
+            TRACK_REQ_BODY and
+            request.body and
+            request.encoding in TRACK_REQ_BODY_ACCEPTED_ENCODINGS and
+            len(request.body) <= TRACK_REQ_BODY_MAX_LEN
+        ):
+            reqCT = request.META.get('CONTENT_TYPE', None)
+            if reqCT:
+                hasTrackedContentType = False
+                for ct in TRACK_REQ_BODY_CONTENT_TYPES:
+                    if ct in reqCT:
+                        hasTrackedContentType = True
+                        break
+                if hasTrackedContentType:
+                    pageview.req_body = request.body
+
+        pageview.save()
 
     def process_response(self, request, response):
         # If dealing with a non-authenticated user, we still should track the
