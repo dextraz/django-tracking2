@@ -150,9 +150,10 @@ class VisitorTrackingMiddleware(MiddlewareMixin):
 
         if (
             TRACK_REQ_BODY and
-            request.body and
+            hasattr(request, '_track_body') and
+            request._track_body and
             request.encoding in TRACK_REQ_BODY_ACCEPTED_ENCODINGS and
-            len(request.body) <= TRACK_REQ_BODY_MAX_LEN
+            len(request._track_body) <= TRACK_REQ_BODY_MAX_LEN
         ):
             reqCT = request.META.get('CONTENT_TYPE', None)
             if reqCT:
@@ -162,9 +163,12 @@ class VisitorTrackingMiddleware(MiddlewareMixin):
                         hasTrackedContentType = True
                         break
                 if hasTrackedContentType:
-                    pageview.req_body = request.body
+                    pageview.req_body = request._track_body
 
         pageview.save()
+
+    def process_request(self, request):
+        request._track_body = request.body
 
     def process_response(self, request, response):
         # If dealing with a non-authenticated user, we still should track the
